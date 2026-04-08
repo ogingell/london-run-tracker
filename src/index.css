@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-900: #060a13;
+  --color-dark-800: #0a1020;
+  --color-dark-700: #111827;
+  --color-dark-600: #1a2332;
+  --color-dark-500: #243044;
+  --color-strava: #fc4c02;
+  --color-strava-dark: #c93d02;
+  --color-neon-cyan: #06d6a0;
+  --color-neon-blue: #118ab2;
+  --color-neon-purple: #7b2ff7;
+  --color-neon-pink: #ef476f;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-dark-900);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+/* Leaflet overrides for dark theme */
+.leaflet-container {
+  background: #060a13 !important;
+}
+
+.leaflet-control-zoom a {
+  background: #111827 !important;
+  color: #94a3b8 !important;
+  border-color: #243044 !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #1a2332 !important;
+  color: #f1f5f9 !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(6, 10, 19, 0.8) !important;
+  color: #475569 !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #64748b !important;
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(252, 76, 2, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(252, 76, 2, 0.6); }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes count-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.animate-count-up {
+  animation: count-up 0.5s ease-out forwards;
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(17, 24, 39, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Progress bar gradient */
+.coverage-bar {
+  background: linear-gradient(90deg, #ef476f 0%, #ffd166 30%, #06d6a0 70%, #06d6a0 100%);
+}
+
+/* Postcode tooltip */
+.postcode-tooltip {
+  background: rgba(17, 24, 39, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  color: #f1f5f9 !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+.postcode-tooltip::before {
+  border-top-color: rgba(17, 24, 39, 0.95) !important;
+}
