@@ -7,6 +7,7 @@ import StravaConnect from './components/StravaConnect';
 import SetupScreen from './components/SetupScreen';
 import ProcessingPanel from './components/ProcessingPanel';
 import DetailPanel from './components/DetailPanel';
+import ProgressView from './components/ProgressView';
 import { api } from './lib/api';
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
   const [placesLoading, setPlacesLoading] = useState(false);
   const [placesSetupStatus, setPlacesSetupStatus] = useState('');
   const [mode, setMode] = useState('postcodes'); // 'postcodes' | 'places'
+  const [view, setView] = useState('map'); // 'map' | 'progress'
 
   useEffect(() => {
     async function init() {

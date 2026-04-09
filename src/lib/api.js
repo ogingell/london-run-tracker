@@ -124,4 +124,7 @@ export const api = {
 
   // Stats
   getStats: () => request('/stats'),
+
+  // Progress
+  getProgressSummary: () => request('/progress/summary'),
 };

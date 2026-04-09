@@ -89,4 +89,40 @@ db.exec(`
   );
 `);
 
+// Add progress-tracking columns (safe no-ops if already present)
+try { db.exec('ALTER TABLE road_coverage ADD COLUMN first_covered_date TEXT'); } catch {}
+try { db.exec('ALTER TABLE road_coverage ADD COLUMN first_covered_activity_id TEXT'); } catch {}
+
+// One-time backfill: assign the earliest nearby-activity date to already-covered roads
+// that have no date yet. Uses activity start coords vs postcode centroid (SQL-only, fast).
+const needsBackfill = db.prepare(
+  'SELECT COUNT(*) as n FROM road_coverage WHERE covered=1 AND first_covered_date IS NULL'
+).get().n;
+
+if (needsBackfill > 0) {
+  db.prepare(`
+    UPDATE road_coverage
+    SET first_covered_date = (
+      SELECT MIN(a.start_date)
+      FROM activities a, road_segments rs, postcode_boundaries pb
+      WHERE rs.id = road_coverage.road_segment_id
+        AND pb.postcode = rs.postcode
+        AND a.matched = 1
+        AND a.start_lat IS NOT NULL
+        AND ABS(a.start_lat - pb.centroid_lat) < 0.15
+        AND ABS(a.start_lng - pb.centroid_lng) < 0.25
+    )
+    WHERE covered = 1 AND first_covered_date IS NULL
+  `).run();
+
+  // Fallback for roads whose postcode had no nearby activity start point
+  db.prepare(`
+    UPDATE road_coverage
+    SET first_covered_date = (SELECT MIN(start_date) FROM activities WHERE matched = 1)
+    WHERE covered = 1 AND first_covered_date IS NULL
+  `).run();
+
+  console.log(`[db] Backfilled first_covered_date for ${needsBackfill} roads.`);
+}
+
 export default db;

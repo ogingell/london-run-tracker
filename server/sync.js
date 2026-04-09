@@ -147,15 +147,19 @@ async function matchActivitiesMultiPostcode(activities, postcodeSets, send) {
   }
 
   const roadCoverage = new Map(); // roadId -> max covered length
+  const roadFirstSeen = new Map(); // roadId -> { date, activityId } — first activity that covered it
   const buf = 0.02;
 
-  for (let i = 0; i < activities.length; i++) {
-    const activity = activities[i];
+  // Process oldest-first so first_covered_date reflects the actual first run
+  const sorted = [...activities].sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''));
+
+  for (let i = 0; i < sorted.length; i++) {
+    const activity = sorted[i];
     const myPostcodes = Array.from(activityPostcodes.get(activity.id) || []);
     if (!myPostcodes.length || !activity.polyline) continue;
 
     const name = (activity.name || 'Unnamed Run').substring(0, 45);
-    send({ type: 'progress', message: `Matching run ${i + 1}/${activities.length}: ${name}`, done: i, total: activities.length, phase: 'match' });
+    send({ type: 'progress', message: `Matching run ${i + 1}/${sorted.length}: ${name}`, done: i, total: sorted.length, phase: 'match' });
 
     const coords = decodePolyline(activity.polyline);
     if (coords.length < 2) continue;
@@ -197,7 +201,13 @@ async function matchActivitiesMultiPostcode(activities, postcodeSets, send) {
             if (turf.booleanPointInPolygon(turf.along(tLine, (s / steps) * roadLen, { units: 'meters' }), buffered)) coveredSamples++;
           }
           const coveredLen = (coveredSamples / (steps + 1)) * roadLen;
-          if (coveredLen > 0) roadCoverage.set(road.id, Math.max(roadCoverage.get(road.id) || 0, coveredLen));
+          if (coveredLen > 0) {
+            if (!roadCoverage.has(road.id)) {
+              // First time this road is covered in this batch — record which activity
+              roadFirstSeen.set(road.id, { date: activity.start_date || null, activityId: activity.id });
+            }
+            roadCoverage.set(road.id, Math.max(roadCoverage.get(road.id) || 0, coveredLen));
+          }
         } catch {}
       }
     }
@@ -206,9 +216,15 @@ async function matchActivitiesMultiPostcode(activities, postcodeSets, send) {
   }
 
   // Write coverage — only upgrade existing values, never downgrade
+  // Also record first_covered_date/activity_id for newly covered roads (don't overwrite existing dates)
   db.transaction(() => {
     const update = db.prepare(`UPDATE road_coverage SET covered=1, covered_length_m=? WHERE road_segment_id=? AND ?>covered_length_m`);
-    for (const [id, len] of roadCoverage) update.run(len, id, len);
+    const updateDate = db.prepare(`UPDATE road_coverage SET first_covered_date=?, first_covered_activity_id=? WHERE road_segment_id=? AND first_covered_date IS NULL`);
+    for (const [id, len] of roadCoverage) {
+      update.run(len, id, len);
+      const seen = roadFirstSeen.get(id);
+      if (seen) updateDate.run(seen.date, seen.activityId, id);
+    }
   })();
 
   // Recompute postcode stats from DB (accumulates all historical runs)
@@ -235,7 +251,7 @@ router.post('/sync/full', async (req, res) => {
 
   try {
     const newActivities = db.prepare(
-      'SELECT id, name, polyline FROM activities WHERE polyline IS NOT NULL AND matched=0'
+      'SELECT id, name, polyline, start_date FROM activities WHERE polyline IS NOT NULL AND matched=0 ORDER BY start_date ASC'
     ).all();
 
     if (newActivities.length === 0) {
@@ -316,7 +332,7 @@ router.post('/sync/london', async (req, res) => {
       'SELECT postcode, boundary, roads_fetched FROM postcode_boundaries ORDER BY postcode'
     ).all();
     const newActivities = db.prepare(
-      'SELECT id, name, polyline FROM activities WHERE polyline IS NOT NULL AND matched=0'
+      'SELECT id, name, polyline, start_date FROM activities WHERE polyline IS NOT NULL AND matched=0 ORDER BY start_date ASC'
     ).all();
 
     const notFetched = allBoundaries.filter(b => !b.roads_fetched);

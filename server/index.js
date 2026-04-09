@@ -11,6 +11,7 @@ import postcodeRoutes from './postcodes.js';
 import syncRoutes from './sync.js';
 import placesRoutes from './places.js';
 import roadsRoutes from './roads.js';
+import progressRoutes from './progress.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -27,6 +28,7 @@ app.use('/api/postcodes', postcodeRoutes);
 app.use('/api', syncRoutes);
 app.use('/api/places', placesRoutes);
 app.use('/api', roadsRoutes);
+app.use('/api', progressRoutes);
 
 // Serve static files in production
 const distPath = join(__dirname, '..', 'dist');
