@@ -1,5 +1,114 @@
 # Hosting London Run Tracker
 
+## Cloud hosting — Railway (recommended, git-push auto-deploy)
+
+Railway is the closest equivalent to Vercel for a full-stack Node.js app: connect your GitHub repo, push code, it deploys automatically. Free tier gives **$5/month credit** — this app uses ~$0.50–1.50/month at idle, so it should run indefinitely on the free tier.
+
+### One-time setup
+
+**1. Push your code to GitHub** (if not already done)
+```bash
+cd /Users/gingelo/Desktop/code/london-run-tracker
+git remote add origin https://github.com/YOUR_USERNAME/london-run-tracker.git
+git push -u origin main
+```
+
+**2. Create a Railway account**
+
+Go to [railway.app](https://railway.app) and sign up with GitHub.
+
+**3. New project → Deploy from GitHub repo**
+
+- Click **New Project** → **Deploy from GitHub repo**
+- Select your `london-run-tracker` repo
+- Railway will detect the `Dockerfile` and start building
+
+**4. Add a persistent volume for the database**
+
+In your Railway project:
+- Click **+ Add a Service** → **Volume**
+- Set **Mount Path**: `/data`
+- This persists your SQLite database across deploys
+
+**5. Set environment variables**
+
+In your Railway service → **Variables** tab, add:
+```
+STRAVA_CLIENT_ID=your_client_id
+STRAVA_CLIENT_SECRET=your_client_secret
+STRAVA_REDIRECT_URI=https://YOUR-APP.railway.app/api/auth/callback
+DB_PATH=/data/london-runs.db
+PORT=3001
+```
+
+Railway automatically sets a public domain like `london-run-tracker-production.up.railway.app`. Copy it from the **Settings** tab.
+
+**6. Update your Strava API settings**
+
+Go to [strava.com/settings/api](https://www.strava.com/settings/api) and set:
+- **Authorization Callback Domain**: `YOUR-APP.railway.app`
+
+**7. That's it — deploys happen automatically on every `git push`**
+
+```bash
+git push  # → Railway builds and deploys in ~2 minutes
+```
+
+---
+
+### Subsequent deploys
+
+```bash
+git add .
+git commit -m "your changes"
+git push  # Railway auto-deploys
+```
+
+Your database on `/data` is preserved across deploys.
+
+---
+
+### Upload your existing database
+
+```bash
+# Install Railway CLI
+brew install railway
+
+# Login
+railway login
+
+# Upload your local DB
+railway run --service london-run-tracker \
+  scp london-runs.db /data/london-runs.db
+```
+
+Or use the Railway dashboard file browser if available.
+
+---
+
+### Useful Railway commands
+
+```bash
+railway logs          # Live logs
+railway status        # App health
+railway open          # Open in browser
+railway variables     # List env vars
+```
+
+---
+
+### Free tier limits
+
+Railway free tier (as of 2025):
+- $5/month credit — typically lasts all month for a small personal app
+- 512MB RAM, shared CPU
+- 100GB outbound data/month
+- App stays running 24/7 (unlike Vercel which kills serverless after 10–60s)
+
+> **Why not Vercel?** Vercel's serverless functions time out at 10–60s. A full London sync takes 8+ minutes. Railway runs a real Node.js process with no timeout limits.
+
+---
+
 ## Cloud hosting — Fly.io (recommended, free)
 
 Fly.io gives you a permanent HTTPS URL accessible from any device, with a **persistent volume** so your SQLite database (activities, coverage data) survives restarts and redeploys. No credit card required for a single small app.
