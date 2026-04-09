@@ -290,51 +290,75 @@ export default function App() {
             />
           </div>
 
-          {/* Mode toggle */}
+          {/* Top-level view tabs */}
           <div className="px-4 pt-3 pb-1">
             <div className="flex rounded-lg bg-dark-700 p-0.5 gap-0.5">
               <button
-                onClick={() => handleModeChange('postcodes')}
+                onClick={() => setView('map')}
                 className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  mode === 'postcodes'
-                    ? 'bg-dark-500 text-white shadow'
-                    : 'text-slate-500 hover:text-slate-300'
+                  view === 'map' ? 'bg-dark-500 text-white shadow' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                Postcodes
+                Map
               </button>
               <button
-                onClick={() => handleModeChange('places')}
+                onClick={() => setView('progress')}
                 className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  mode === 'places'
-                    ? 'bg-dark-500 text-white shadow'
-                    : 'text-slate-500 hover:text-slate-300'
+                  view === 'progress' ? 'bg-dark-500 text-white shadow' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                Neighbourhoods
+                Progress
               </button>
             </div>
           </div>
 
-          {/* Stats */}
-          {stats && <StatsBar stats={stats} />}
+          {view === 'progress' ? (
+            <ProgressView />
+          ) : (
+            <>
+              {/* Mode toggle */}
+              <div className="px-4 pt-2 pb-1">
+                <div className="flex rounded-lg bg-dark-700 p-0.5 gap-0.5">
+                  <button
+                    onClick={() => handleModeChange('postcodes')}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      mode === 'postcodes' ? 'bg-dark-500 text-white shadow' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    Postcodes
+                  </button>
+                  <button
+                    onClick={() => handleModeChange('places')}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                      mode === 'places' ? 'bg-dark-500 text-white shadow' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    Neighbourhoods
+                  </button>
+                </div>
+              </div>
 
-          {/* Processing indicator */}
-          {processing && <ProcessingPanel status={processStatus} detail={processDetail} />}
+              {/* Stats */}
+              {stats && <StatsBar stats={stats} />}
 
-          {/* Leaderboard */}
-          <div className="flex-1 overflow-hidden">
-            <Leaderboard
-              mode={mode}
-              stats={activeStats}
-              placesStats={activePlacesStats}
-              selectedItem={selectedItem}
-              onSelect={handleItemSelect}
-              placesLoading={placesLoading}
-              placesSetupStatus={placesSetupStatus}
-              onSetupPlaces={runPlacesSetup}
-            />
-          </div>
+              {/* Processing indicator */}
+              {processing && <ProcessingPanel status={processStatus} detail={processDetail} />}
+
+              {/* Leaderboard */}
+              <div className="flex-1 overflow-hidden">
+                <Leaderboard
+                  mode={mode}
+                  stats={activeStats}
+                  placesStats={activePlacesStats}
+                  selectedItem={selectedItem}
+                  onSelect={handleItemSelect}
+                  placesLoading={placesLoading}
+                  placesSetupStatus={placesSetupStatus}
+                  onSetupPlaces={runPlacesSetup}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Map */}
