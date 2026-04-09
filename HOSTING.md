@@ -1,145 +1,156 @@
 # Hosting London Run Tracker
 
-## Option 1: Access on your phone via local network (easiest)
+## Cloud hosting — Fly.io (recommended, free)
 
-Your Mac and phone must be on the same Wi-Fi network.
+Fly.io gives you a permanent HTTPS URL accessible from any device, with a **persistent volume** so your SQLite database (activities, coverage data) survives restarts and redeploys. No credit card required for a single small app.
 
-**1. Find your Mac's local IP address**
+### One-time setup
+
+**1. Install the Fly CLI**
 ```bash
-ipconfig getifaddr en0
-# e.g. 192.168.1.42
+brew install flyctl
 ```
 
-**2. Update `vite.config.js`** to allow connections from other devices — add `host: true`:
-```js
-server: {
-  host: true,   // ← add this line
-  port: 5173,
-  ...
-}
-```
-
-**3. Start the app as normal**
+**2. Sign up (free)**
 ```bash
-npm run dev
+fly auth signup
+# or if you have an account:
+fly auth login
 ```
 
-**4. On your phone**, open:
+**3. Create the app** (run once from the project directory)
+```bash
+cd /Users/gingelo/Desktop/code/london-run-tracker
+fly apps create london-run-tracker
 ```
-http://192.168.1.42:5173
+> If `london-run-tracker` is taken, pick another name — it becomes your URL.
+
+**4. Create a persistent volume for the database** (3GB, free tier)
+```bash
+fly volumes create london_run_data --region lhr --size 3
 ```
 
-> Your phone and Mac must stay on the same Wi-Fi. Works great at home.
+**5. Set your Strava credentials as secrets**
+```bash
+fly secrets set \
+  STRAVA_CLIENT_ID=your_client_id \
+  STRAVA_CLIENT_SECRET=your_client_secret \
+  STRAVA_REDIRECT_URI=https://london-run-tracker.fly.dev/api/auth/callback
+```
+Replace `london-run-tracker` with your actual app name if different.
+
+**6. Update your Strava API settings**
+
+Go to [strava.com/settings/api](https://www.strava.com/settings/api) and set:
+- **Authorization Callback Domain**: `london-run-tracker.fly.dev`
+
+**7. Deploy**
+```bash
+fly deploy
+```
+
+This builds the Docker image, pushes it, and starts the app. Takes ~2 minutes.
+
+**8. Open the app**
+```bash
+fly open
+# or visit: https://london-run-tracker.fly.dev
+```
+
+Add it to your iPhone home screen via Safari → Share → Add to Home Screen for a full-screen app experience.
 
 ---
 
-## Option 2: Expose publicly via Cloudflare Tunnel (free, no port forwarding)
+### Subsequent deploys
 
-This gives you a permanent HTTPS URL you can access from anywhere — including mobile data.
-
-**1. Install cloudflared**
+After making code changes:
 ```bash
-brew install cloudflare/cloudflare/cloudflared
+fly deploy
 ```
 
-**2. Start the app**
+Your database on `/data` is preserved across deploys.
+
+---
+
+### Upload your existing database
+
+Your local SQLite database has all your existing activity and coverage data. Upload it to avoid re-syncing from scratch:
+
+```bash
+# Stop the running app temporarily
+fly machine stop
+
+# Copy your local DB to the volume
+fly sftp shell
+# Then in the sftp shell:
+put london-runs.db /data/london-runs.db
+exit
+
+# Restart
+fly machine start
+```
+
+Or use the simpler one-liner if you have `flyctl` >= 0.2:
+```bash
+fly ssh sftp put london-runs.db /data/london-runs.db
+```
+
+---
+
+### Useful commands
+
+```bash
+fly status              # Check app health
+fly logs                # Live server logs
+fly ssh console         # SSH into the running machine
+fly volumes list        # Check volume status
+fly secrets list        # List set secrets (values hidden)
+```
+
+---
+
+### Free tier limits
+
+Fly.io free tier (as of 2025) includes:
+- 3 shared-CPU VMs (your app uses 1)
+- 3GB persistent storage
+- 160GB outbound data/month
+- Automatic sleep when idle, instant wake on request
+
+This app is well within the free limits for personal use.
+
+---
+
+## Local network access (quick, no account needed)
+
+For access on your phone at home:
+
+**1. Start the app**
 ```bash
 npm run dev
 ```
 
-**3. In a second terminal, create a quick tunnel**
+Vite will print something like:
+```
+  ➜  Network: http://192.168.1.42:5173/
+```
+
+**2. Open that URL on your phone** (must be on same Wi-Fi)
+
+**3. Add to home screen** in Safari: Share → Add to Home Screen
+
+---
+
+## Temporary public URL (no sign-up)
+
+For quick sharing or testing on mobile data:
+
 ```bash
+# Install cloudflared
+brew install cloudflare/cloudflare/cloudflared
+
+# Start app, then in another terminal:
 cloudflared tunnel --url http://localhost:5173
 ```
 
-It will print a URL like `https://random-words.trycloudflare.com` — open that on any device.
-
-> This is a temporary tunnel (URL changes each time). For a permanent URL, set up a named tunnel at dash.cloudflare.com (free with a Cloudflare account).
-
----
-
-## Option 3: ngrok (alternative to Cloudflare)
-
-```bash
-brew install ngrok
-ngrok http 5173
-```
-
-Opens a public HTTPS URL valid for a few hours on the free plan.
-
----
-
-## Option 4: Build and serve as a static site on your Mac
-
-For a faster, more stable local experience (no Vite dev server overhead):
-
-```bash
-# Build the frontend
-npm run build
-
-# The Express server already serves the built files from /dist
-# Just run the API directly:
-PORT=3001 node server/index.js
-```
-
-Then access at `http://localhost:3001` (or your Mac's IP on port 3001 from other devices).
-
-> This is the recommended setup for daily use — one process, faster page loads.
-
----
-
-## Option 5: Run as a background service (always-on)
-
-Use `pm2` to keep the app running even after you close the terminal:
-
-```bash
-npm install -g pm2
-
-# Build frontend first
-npm run build
-
-# Start the server
-pm2 start server/index.js --name london-run-tracker -- --env PORT=3001
-
-# Auto-start on Mac login
-pm2 startup
-pm2 save
-```
-
-Then access at `http://localhost:3001` or via your Mac's IP from any device on your network.
-
-Stop/restart with:
-```bash
-pm2 stop london-run-tracker
-pm2 restart london-run-tracker
-pm2 logs london-run-tracker
-```
-
----
-
-## Add to iPhone home screen
-
-Once you have a URL (local IP or Cloudflare):
-
-1. Open the URL in **Safari** on your iPhone
-2. Tap the **Share** button (box with arrow)
-3. Tap **Add to Home Screen**
-4. Tap **Add**
-
-The app will open full-screen like a native app.
-
----
-
-## Environment variables
-
-Make sure your `.env` file is present with your Strava credentials:
-```
-STRAVA_CLIENT_ID=your_client_id
-STRAVA_CLIENT_SECRET=your_client_secret
-```
-
-If accessing from a non-localhost URL, update the redirect URI in `server/strava.js`:
-```js
-const REDIRECT_URI = 'http://YOUR_IP_OR_DOMAIN/api/auth/callback';
-```
-And update your Strava app's **Authorization Callback Domain** at strava.com/settings/api.
+Prints a public HTTPS URL — valid until you stop the command.

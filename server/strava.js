@@ -6,7 +6,7 @@ const router = Router();
 const STRAVA_AUTH_URL = 'https://www.strava.com/oauth/authorize';
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 const STRAVA_API_URL = 'https://www.strava.com/api/v3';
-const REDIRECT_URI = 'http://localhost:5173/api/auth/callback';
+const REDIRECT_URI = process.env.STRAVA_REDIRECT_URI || 'http://localhost:5173/api/auth/callback';
 
 function getCredentials() {
   const clientId = process.env.STRAVA_CLIENT_ID;
