@@ -42,6 +42,7 @@ export const api = {
 
   // Places
   getPlacesStatus: () => request('/places/status'),
+  resetPlaces: () => request('/places/reset', { method: 'POST' }),
   computePlacesCoverage: () => request('/places/compute-coverage', { method: 'POST' }),
   setupPlaces: async (onProgress) => {
     const res = await fetch(`${BASE}/places/setup`, { method: 'POST' });

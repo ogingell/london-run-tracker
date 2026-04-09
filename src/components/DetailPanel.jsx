@@ -23,21 +23,27 @@ function fmt(m) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
 }
 
-function RoadRow({ road }) {
-  const pct = road.length_m > 0
-    ? Math.min(100, (road.covered_length_m / road.length_m) * 100)
-    : 0;
+function RoadRow({ road, isSelected, onClick }) {
+  const len = road.total_length_m ?? road.length_m ?? 0;
+  const pct = len > 0 ? Math.min(100, (road.covered_length_m / len) * 100) : 0;
   const partial = road.covered && pct < 95;
 
   return (
-    <div className={`flex items-center gap-2.5 px-4 py-2 border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors`}>
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-4 py-2 border-b border-white/[0.03] transition-colors text-left cursor-pointer
+        ${isSelected
+          ? 'bg-white/10 border-l-2 border-l-yellow-400'
+          : 'hover:bg-white/[0.04] border-l-2 border-l-transparent'
+        }`}
+    >
       {road.covered
-        ? <CheckCircle2 size={13} className={partial ? 'text-amber-400 flex-shrink-0' : 'text-emerald-400 flex-shrink-0'} />
+        ? <CheckCircle2 size={13} className={`flex-shrink-0 ${partial ? 'text-amber-400' : 'text-emerald-400'}`} />
         : <Circle size={13} className="text-slate-700 flex-shrink-0" />
       }
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 min-w-0">
-          <span className="text-xs font-medium truncate text-slate-200">{road.name}</span>
+          <span className={`text-xs font-medium truncate ${isSelected ? 'text-yellow-300' : 'text-slate-200'}`}>{road.name}</span>
           <span className="text-[10px] text-slate-600 flex-shrink-0">{HIGHWAY_LABELS[road.highway_type] || road.highway_type}</span>
         </div>
         {road.covered && (
@@ -50,18 +56,19 @@ function RoadRow({ road }) {
         )}
       </div>
       <span className="text-[10px] text-slate-500 flex-shrink-0 tabular-nums">
-        {road.covered ? `${fmt(road.covered_length_m)} / ` : ''}{fmt(road.length_m)}
+        {road.covered ? `${fmt(road.covered_length_m)} / ` : ''}{fmt(len)}
       </span>
-    </div>
+    </button>
   );
 }
 
-export default function DetailPanel({ mode, selectedId, onClose }) {
+export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState('unrun'); // 'unrun' | 'run'
+  const [tab, setTab] = useState('unrun');
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const [selectedRoadId, setSelectedRoadId] = useState(null);
 
   useEffect(() => {
     if (!selectedId) { setData(null); return; }
@@ -69,6 +76,8 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
     setTab('unrun');
     setSearch('');
     setShowAll(false);
+    setSelectedRoadId(null);
+    onRoadSelect?.(null);
     api.getRoadDetail(mode, selectedId)
       .then(setData)
       .catch(console.error)
@@ -82,12 +91,27 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
       ? data.roads.filter(r => r.name.toLowerCase().includes(q))
       : data.roads;
     return {
-      runRoads: filtered.filter(r => r.covered),
-      unrunRoads: filtered.filter(r => !r.covered),
+      runRoads:   filtered.filter(r =>  r.covered).sort((a, b) => b.covered_length_m - a.covered_length_m),
+      unrunRoads: filtered.filter(r => !r.covered).sort((a, b) => b.total_length_m   - a.total_length_m),
     };
   }, [data, search]);
 
   if (!selectedId) return null;
+
+  const handleRoadClick = (road) => {
+    if (selectedRoadId === road.id) {
+      setSelectedRoadId(null);
+      onRoadSelect?.(null);
+    } else {
+      setSelectedRoadId(road.id);
+      // Parse geometry and convert to [lat, lng] pairs for Leaflet
+      try {
+        const geom = JSON.parse(road.geometry);
+        const latlngs = geom.coordinates.map(([lng, lat]) => [lat, lng]);
+        onRoadSelect?.({ id: road.id, name: road.name, latlngs, covered: road.covered });
+      } catch {}
+    }
+  };
 
   const label = mode === 'postcodes' ? selectedId : data?.name || selectedId;
   const activeList = tab === 'run' ? runRoads : unrunRoads;
@@ -95,8 +119,10 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
   const visible = showAll ? activeList : activeList.slice(0, LIMIT);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col bg-dark-800 border-t border-white/10 shadow-2xl"
-         style={{ maxHeight: '42vh' }}>
+    <div
+      className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col bg-dark-800 border-t border-white/10 shadow-2xl"
+      style={{ maxHeight: '42vh' }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
         <Route size={14} className="text-strava flex-shrink-0" />
@@ -109,19 +135,21 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
           )}
         </div>
 
-        {/* Search */}
         <div className="relative flex-shrink-0">
           <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setShowAll(false); }}
             placeholder="Search roads..."
             className="pl-6 pr-2 py-1 text-xs bg-dark-700 border border-white/10 rounded-md text-slate-200
                        placeholder-slate-600 focus:outline-none focus:border-strava/50 w-36"
           />
         </div>
 
-        <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors cursor-pointer flex-shrink-0">
+        <button
+          onClick={() => { onClose(); onRoadSelect?.(null); }}
+          className="text-slate-500 hover:text-slate-300 transition-colors cursor-pointer flex-shrink-0"
+        >
           <X size={15} />
         </button>
       </div>
@@ -129,7 +157,7 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
       {/* Tabs */}
       <div className="flex border-b border-white/5 flex-shrink-0">
         <button
-          onClick={() => { setTab('unrun'); setShowAll(false); }}
+          onClick={() => { setTab('unrun'); setShowAll(false); setSelectedRoadId(null); onRoadSelect?.(null); }}
           className={`flex-1 py-2 text-xs font-semibold transition-colors cursor-pointer
             ${tab === 'unrun' ? 'text-white border-b-2 border-strava' : 'text-slate-500 hover:text-slate-300'}`}
         >
@@ -137,7 +165,7 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
           {data && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-dark-600 text-slate-400 text-[10px]">{unrunRoads.length}</span>}
         </button>
         <button
-          onClick={() => { setTab('run'); setShowAll(false); }}
+          onClick={() => { setTab('run'); setShowAll(false); setSelectedRoadId(null); onRoadSelect?.(null); }}
           className={`flex-1 py-2 text-xs font-semibold transition-colors cursor-pointer
             ${tab === 'run' ? 'text-white border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}
         >
@@ -158,7 +186,14 @@ export default function DetailPanel({ mode, selectedId, onClose }) {
           </div>
         ) : (
           <>
-            {visible.map(road => <RoadRow key={road.id} road={road} />)}
+            {visible.map(road => (
+              <RoadRow
+                key={road.id}
+                road={road}
+                isSelected={selectedRoadId === road.id}
+                onClick={() => handleRoadClick(road)}
+              />
+            ))}
             {!showAll && activeList.length > LIMIT && (
               <button
                 onClick={() => setShowAll(true)}

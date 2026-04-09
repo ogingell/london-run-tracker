@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, GeoJSON, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, Polyline, useMap, CircleMarker } from 'react-leaflet';
 import polylineCodec from '@mapbox/polyline';
 
 const LONDON_CENTER = [51.505, -0.118];
@@ -110,6 +110,44 @@ function BoundaryLayer({ data, mode, selectedItem, onItemSelect }) {
   );
 }
 
+function RoadHighlight({ road }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (road?.latlngs?.length) {
+      // Fit map to highlighted road with zoom floor of 16
+      const lats = road.latlngs.map(p => p[0]);
+      const lngs = road.latlngs.map(p => p[1]);
+      map.flyToBounds(
+        [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]],
+        { padding: [80, 80], duration: 0.5, maxZoom: 17 }
+      );
+    }
+  }, [road, map]);
+
+  if (!road) return null;
+
+  const color = road.covered ? '#facc15' : '#f87171'; // yellow=run, red=unrun
+
+  return (
+    <>
+      {/* Glow halo */}
+      <Polyline
+        positions={road.latlngs}
+        pathOptions={{ color, weight: 14, opacity: 0.25 }}
+      />
+      {/* Main highlight */}
+      <Polyline
+        positions={road.latlngs}
+        pathOptions={{ color, weight: 5, opacity: 0.95, dashArray: road.covered ? undefined : '6 5' }}
+      />
+      {/* End-point dots */}
+      <CircleMarker center={road.latlngs[0]} radius={5} pathOptions={{ color, fillColor: color, fillOpacity: 1, weight: 2 }} />
+      <CircleMarker center={road.latlngs[road.latlngs.length - 1]} radius={5} pathOptions={{ color, fillColor: color, fillOpacity: 1, weight: 2 }} />
+    </>
+  );
+}
+
 function ActivityTraces({ polylines }) {
   const decoded = useMemo(() => (
     polylines.map(p => ({
@@ -127,7 +165,7 @@ function ActivityTraces({ polylines }) {
   ));
 }
 
-export default function Map({ boundaries, mode, polylines, selectedItem, onItemSelect }) {
+export default function Map({ boundaries, mode, polylines, selectedItem, onItemSelect, highlightedRoad }) {
   return (
     <MapContainer
       center={LONDON_CENTER}
@@ -144,6 +182,7 @@ export default function Map({ boundaries, mode, polylines, selectedItem, onItemS
         selectedItem={selectedItem}
         onItemSelect={onItemSelect}
       />
+      <RoadHighlight road={highlightedRoad} />
     </MapContainer>
   );
 }

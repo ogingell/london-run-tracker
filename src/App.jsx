@@ -22,6 +22,7 @@ export default function App() {
   const [processing, setProcessing] = useState(false);
   const [processStatus, setProcessStatus] = useState('');
   const [processDetail, setProcessDetail] = useState(null); // { done, total, phase }
+  const [highlightedRoad, setHighlightedRoad] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
   const [placesSetupStatus, setPlacesSetupStatus] = useState('');
   const [mode, setMode] = useState('postcodes'); // 'postcodes' | 'places'
@@ -230,6 +231,7 @@ export default function App() {
 
   const handleItemSelect = useCallback((id) => {
     setSelectedItem(prev => prev === id ? null : id);
+    setHighlightedRoad(null);
   }, []);
 
   const handleModeChange = useCallback((newMode) => {
@@ -341,11 +343,13 @@ export default function App() {
             polylines={polylines}
             selectedItem={selectedItem}
             onItemSelect={handleItemSelect}
+            highlightedRoad={highlightedRoad}
           />
           <DetailPanel
             mode={mode}
             selectedId={selectedItem}
-            onClose={() => setSelectedItem(null)}
+            onClose={() => { setSelectedItem(null); setHighlightedRoad(null); }}
+            onRoadSelect={setHighlightedRoad}
           />
         </div>
       </div>

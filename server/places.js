@@ -7,6 +7,47 @@ const router = Router();
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const LONDON_BBOX = '51.28,-0.51,51.70,0.33';
 
+// Same London boundary polygon used by postcodes.js for clipping Voronoi cells
+const LONDON_BOUNDARY = turf.polygon([[
+  [-0.5104, 51.2868], [-0.4740, 51.2760], [-0.4100, 51.2770],
+  [-0.3380, 51.2860], [-0.2730, 51.2920], [-0.2040, 51.3030],
+  [-0.1380, 51.3120], [-0.0720, 51.3050], [-0.0130, 51.3100],
+  [0.0440, 51.3170], [0.0930, 51.3260], [0.1440, 51.3380],
+  [0.1770, 51.3570], [0.2060, 51.3790], [0.2270, 51.4040],
+  [0.2390, 51.4330], [0.2440, 51.4600], [0.2370, 51.4880],
+  [0.2210, 51.5160], [0.2100, 51.5450], [0.2060, 51.5740],
+  [0.1890, 51.6000], [0.1650, 51.6200], [0.1380, 51.6380],
+  [0.1050, 51.6520], [0.0680, 51.6620], [0.0270, 51.6700],
+  [-0.0160, 51.6740], [-0.0640, 51.6720], [-0.1100, 51.6690],
+  [-0.1580, 51.6700], [-0.2060, 51.6740], [-0.2540, 51.6720],
+  [-0.2990, 51.6650], [-0.3420, 51.6530], [-0.3800, 51.6370],
+  [-0.4120, 51.6170], [-0.4370, 51.5940], [-0.4560, 51.5680],
+  [-0.4720, 51.5400], [-0.4850, 51.5100], [-0.5020, 51.4800],
+  [-0.5140, 51.4490], [-0.5200, 51.4170], [-0.5190, 51.3850],
+  [-0.5160, 51.3530], [-0.5104, 51.2868],
+]]);
+
+function buildVoronoiBoundaries(centroids) {
+  const points = turf.featureCollection(
+    centroids.map(c => turf.point([c.lng, c.lat], { id: c.id }))
+  );
+  const bbox = turf.bbox(LONDON_BOUNDARY);
+  let voronoi;
+  try { voronoi = turf.voronoi(points, { bbox }); } catch { return new Map(); }
+  if (!voronoi?.features) return new Map();
+
+  const result = new Map();
+  for (let i = 0; i < voronoi.features.length; i++) {
+    const cell = voronoi.features[i];
+    const c = centroids[i];
+    if (!cell || !c) continue;
+    let clipped = cell;
+    try { clipped = turf.intersect(turf.featureCollection([cell, LONDON_BOUNDARY])); } catch {}
+    if (clipped) result.set(c.id, clipped);
+  }
+  return result;
+}
+
 const yield_ = () => new Promise(r => setImmediate(r));
 
 // Fetch London neighbourhood/place boundaries from OSM
@@ -178,6 +219,15 @@ router.get('/status', (req, res) => {
   res.json({ initialized: count.count > 0, count: count.count });
 });
 
+router.post('/reset', (req, res) => {
+  db.transaction(() => {
+    db.prepare('DELETE FROM place_road_coverage').run();
+    db.prepare('DELETE FROM place_road_segments').run();
+    db.prepare('DELETE FROM places').run();
+  })();
+  res.json({ ok: true });
+});
+
 router.post('/setup', async (req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json', 'Transfer-Encoding': 'chunked' });
   const send = (data) => res.write(JSON.stringify(data) + '\n');
@@ -195,7 +245,38 @@ router.post('/setup', async (req, res) => {
     const elements = osmData.elements || [];
     send({ message: `Processing ${elements.length} place elements...` });
 
-    const GREATER_LONDON_BBOX = { minLng: -0.51, maxLng: 0.33, minLat: 51.28, maxLat: 51.70 };
+    const BBOX = { minLng: -0.51, maxLng: 0.33, minLat: 51.28, maxLat: 51.70 };
+
+    // Phase 1: collect centroids for all valid places
+    const centroids = []; // { id, name, placeType, lat, lng }
+
+    for (const el of elements) {
+      const name = el.tags?.name;
+      if (!name) continue;
+      const placeType = el.tags?.place || 'suburb';
+      let lat, lng;
+
+      if (el.type === 'relation') {
+        const poly = osmRelationToPolygon(el);
+        if (poly) {
+          const c = turf.centroid(poly);
+          [lng, lat] = c.geometry.coordinates;
+        }
+      } else if (el.type === 'node' && el.lat && el.lon) {
+        lat = el.lat; lng = el.lon;
+      }
+
+      if (lat == null) continue;
+      if (lng < BBOX.minLng || lng > BBOX.maxLng || lat < BBOX.minLat || lat > BBOX.maxLat) continue;
+
+      centroids.push({ id: `place_${el.type}_${el.id}`, name, placeType, lat, lng });
+    }
+
+    send({ message: `${centroids.length} places found — building Voronoi boundaries...` });
+
+    // Phase 2: Voronoi tessellation over all centroids — no overlap guaranteed
+    const voronoiMap = buildVoronoiBoundaries(centroids);
+    send({ message: `Voronoi done — saving to database...` });
 
     const insert = db.prepare(`
       INSERT OR IGNORE INTO places (id, name, place_type, boundary, centroid_lat, centroid_lng)
@@ -204,39 +285,15 @@ router.post('/setup', async (req, res) => {
 
     let added = 0;
     db.transaction(() => {
-      for (const el of elements) {
-        const name = el.tags?.name;
-        if (!name) continue;
-        const placeType = el.tags?.place || 'suburb';
-
-        let poly = null;
-        let centroidLat, centroidLng;
-
-        if (el.type === 'relation') {
-          poly = osmRelationToPolygon(el);
-          if (poly) {
-            const c = turf.centroid(poly);
-            [centroidLng, centroidLat] = c.geometry.coordinates;
-          }
-        } else if (el.type === 'node' && el.lat && el.lon) {
-          centroidLat = el.lat;
-          centroidLng = el.lon;
-          poly = turf.circle([el.lon, el.lat], 0.6, { units: 'kilometers', steps: 16 });
-        }
-
-        if (!poly) continue;
-
-        if (centroidLng < GREATER_LONDON_BBOX.minLng || centroidLng > GREATER_LONDON_BBOX.maxLng ||
-            centroidLat < GREATER_LONDON_BBOX.minLat || centroidLat > GREATER_LONDON_BBOX.maxLat) continue;
-
-        insert.run(`place_${el.type}_${el.id}`, name, placeType, JSON.stringify(poly.geometry), centroidLat, centroidLng);
+      for (const c of centroids) {
+        const boundary = voronoiMap.get(c.id);
+        if (!boundary) continue;
+        insert.run(c.id, c.name, c.placeType, JSON.stringify(boundary.geometry), c.lat, c.lng);
         added++;
       }
     })();
 
     send({ message: `${added} neighbourhoods saved — computing coverage from loaded road data...` });
-
-    // Immediately derive coverage from any already-loaded postcode road data
     await computePlacesCoverage((msg) => send(msg));
 
     send({ done: true, total: added });
