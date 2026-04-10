@@ -3,11 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "node server/index.js"
 healthcheckPath = "/api/auth/status"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-
-[[volumes]]
-mountPath = "/data"

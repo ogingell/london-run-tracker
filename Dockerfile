@@ -12,9 +12,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Only install production deps
+# Copy node_modules from builder — avoids recompiling native modules (better-sqlite3)
+# in an image that lacks build tools (python, make, g++)
+COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-RUN npm ci --omit=dev
 
 # Copy built frontend and server
 COPY --from=builder /app/dist ./dist
