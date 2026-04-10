@@ -10,27 +10,7 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_road_segments_postcode ON road_segments(postcode);
-  CREATE INDEX IF NOT EXISTS idx_road_coverage_covered ON road_coverage(covered);
-`);
-
-// Startup repair: ensure road_coverage rows exist for every road_segment.
-// Fast no-op if all rows are present. Guards against accidental wipes.
-db.prepare(`
-  INSERT OR IGNORE INTO road_coverage (road_segment_id, covered, covered_length_m)
-  SELECT id, 0, 0 FROM road_segments
-`).run();
-
-// If road_coverage has no covered rows but activities are marked matched,
-// reset matched so the next sync re-derives coverage from the road data.
-const coveredCount = db.prepare('SELECT COUNT(*) as n FROM road_coverage WHERE covered=1').get().n;
-const matchedCount = db.prepare('SELECT COUNT(*) as n FROM activities WHERE matched=1').get().n;
-if (coveredCount === 0 && matchedCount > 0) {
-  db.prepare('UPDATE activities SET matched=0').run();
-  console.log('[db] Coverage rows missing — reset activities to unmatched for re-sync.');
-}
-
+// ── Schema — must run before any queries or index creation ───────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS tokens (
     id INTEGER PRIMARY KEY DEFAULT 1,
@@ -89,7 +69,29 @@ db.exec(`
   );
 `);
 
-// Add progress-tracking columns (safe no-ops if already present)
+// ── Indexes (tables guaranteed to exist now) ──────────────────────────────────
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_road_segments_postcode ON road_segments(postcode);
+  CREATE INDEX IF NOT EXISTS idx_road_coverage_covered ON road_coverage(covered);
+`);
+
+// ── Startup repair ────────────────────────────────────────────────────────────
+// Ensure road_coverage rows exist for every road_segment (fast no-op if present)
+db.prepare(`
+  INSERT OR IGNORE INTO road_coverage (road_segment_id, covered, covered_length_m)
+  SELECT id, 0, 0 FROM road_segments
+`).run();
+
+// If road_coverage has no covered rows but activities are marked matched,
+// reset matched so the next sync re-derives coverage from road data.
+const coveredCount = db.prepare('SELECT COUNT(*) as n FROM road_coverage WHERE covered=1').get().n;
+const matchedCount = db.prepare('SELECT COUNT(*) as n FROM activities WHERE matched=1').get().n;
+if (coveredCount === 0 && matchedCount > 0) {
+  db.prepare('UPDATE activities SET matched=0').run();
+  console.log('[db] Coverage rows missing — reset activities to unmatched for re-sync.');
+}
+
+// ── Progress-tracking columns (safe no-ops if already present) ────────────────
 try { db.exec('ALTER TABLE road_coverage ADD COLUMN first_covered_date TEXT'); } catch {}
 try { db.exec('ALTER TABLE road_coverage ADD COLUMN first_covered_activity_id TEXT'); } catch {}
 
