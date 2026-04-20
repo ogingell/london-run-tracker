@@ -241,6 +241,14 @@ export default function App() {
     setSelectedItem(null);
   }, []);
 
+  // Called from ProgressView when user clicks an area row — jump to map + open detail
+  const handleProgressAreaClick = useCallback((id, areaMode) => {
+    setMode(areaMode);
+    setSelectedItem(id);
+    setHighlightedRoad(null);
+    setView('map');
+  }, []);
+
   if (loading) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-dark-900">
@@ -313,7 +321,7 @@ export default function App() {
           </div>
 
           {view === 'progress' ? (
-            <ProgressView />
+            <ProgressView onAreaClick={handleProgressAreaClick} />
           ) : (
             <>
               {/* Mode toggle */}

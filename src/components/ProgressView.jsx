@@ -24,7 +24,7 @@ function fmtDuration(seconds) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export default function ProgressView() {
+export default function ProgressView({ onAreaClick }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
@@ -153,7 +153,12 @@ export default function ProgressView() {
             ) : (
               <div className="space-y-2">
                 {areaItems.map(item => (
-                  <AreaRow key={item.postcode ?? item.id} item={item} />
+                  <AreaRow
+                    key={item.postcode ?? item.id}
+                    item={item}
+                    mode={mode}
+                    onClick={onAreaClick}
+                  />
                 ))}
               </div>
             )}
@@ -189,16 +194,24 @@ function ModeBtn({ active, onClick, children }) {
   );
 }
 
-function AreaRow({ item }) {
-  const name      = item.postcode ?? item.name;
-  const before    = Math.min(100, item.coverageBefore ?? 0);
-  const delta     = Math.min(item.delta ?? 0, 100 - before);
+function AreaRow({ item, mode, onClick }) {
+  const name   = item.postcode ?? item.name;
+  const before = Math.min(100, item.coverageBefore ?? 0);
+  const delta  = Math.min(item.delta ?? 0, 100 - before);
+  const id     = mode === 'postcodes' ? item.postcode : item.id;
 
   return (
-    <div className="bg-dark-700 rounded-lg p-3">
+    <div
+      className="bg-dark-700 rounded-lg p-3 cursor-pointer hover:bg-dark-600 transition-colors"
+      onClick={() => onClick?.(id, mode)}
+      title="Click to see all roads"
+    >
       <div className="flex justify-between items-baseline mb-2">
         <span className="font-semibold text-sm">{name}</span>
-        <span className="text-xs text-emerald-400 font-bold">+{delta.toFixed(1)}%</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-emerald-400 font-bold">+{delta.toFixed(1)}%</span>
+          <span className="text-xs text-slate-600">→ roads</span>
+        </div>
       </div>
 
       {/* Coverage bar: grey = existing, green = new, dark = uncovered */}
