@@ -384,6 +384,11 @@ export default function App() {
             selectedId={selectedItem}
             onClose={() => { setSelectedItem(null); setHighlightedRoad(null); }}
             onRoadSelect={setHighlightedRoad}
+            onRoadsImported={async () => {
+              const [freshStats, freshBounds] = await Promise.all([api.getStats(), api.getBoundaries()]);
+              setStats(freshStats);
+              setBoundaries(freshBounds);
+            }}
           />
         </div>
       </div>

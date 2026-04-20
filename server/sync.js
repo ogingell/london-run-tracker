@@ -244,6 +244,66 @@ async function matchActivitiesMultiPostcode(activities, postcodeSets, send) {
   return roadCoverage.size;
 }
 
+// ── Fetch roads + match activities for a single postcode ─────────────────────
+// Lets users import individual postcodes without a full London scan.
+router.post('/postcodes/:postcode/fetch-roads', async (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  const { postcode } = req.params;
+
+  try {
+    const boundary = db.prepare(
+      'SELECT postcode, boundary, roads_fetched FROM postcode_boundaries WHERE postcode=?'
+    ).get(postcode);
+    if (!boundary) { send({ type: 'error', message: `Postcode ${postcode} not found` }); res.end(); return; }
+
+    // Phase 1: fetch roads (skip if already loaded)
+    if (!boundary.roads_fetched) {
+      send({ type: 'status', message: `Fetching roads for ${postcode} from OpenStreetMap…` });
+      const boundaryGeo = JSON.parse(boundary.boundary);
+      const [west, south, east, north] = turf.bbox(boundaryGeo);
+      const osmData = await fetchRoadsForBbox(south - 0.001, west - 0.001, north + 0.001, east + 0.001);
+      const ways = osmToWays(osmData);
+      const { count } = await storeRoads(ways, postcode, boundaryGeo);
+      send({ type: 'status', message: `Loaded ${count} roads. Scanning your runs…` });
+    } else {
+      send({ type: 'status', message: `Roads already loaded for ${postcode}. Re-matching your runs…` });
+    }
+
+    // Phase 2: find all activities that pass through this postcode
+    const allActivities = db.prepare(
+      'SELECT id, name, polyline, start_date FROM activities WHERE polyline IS NOT NULL ORDER BY start_date ASC'
+    ).all();
+
+    const boundaryRow = db.prepare('SELECT boundary FROM postcode_boundaries WHERE postcode=?').get(postcode);
+    const boundaries = [{ postcode, boundary: boundaryRow.boundary }];
+
+    const matching = [];
+    for (const act of allActivities) {
+      const pcs = findPostcodesForActivity(act, boundaries);
+      if (pcs.includes(postcode)) matching.push(act);
+    }
+
+    // Phase 3: match those activities against this postcode's roads
+    if (matching.length > 0) {
+      send({ type: 'status', message: `Matching ${matching.length} run${matching.length === 1 ? '' : 's'} through ${postcode}…` });
+      const postcodeSets = new Map([[postcode, matching]]);
+      await matchActivitiesMultiPostcode(matching, postcodeSets, send);
+    }
+
+    // Phase 4: recompute place coverage silently
+    await computePlacesCoverage(() => {});
+
+    send({ type: 'done', message: `${postcode} ready — ${matching.length} run${matching.length === 1 ? '' : 's'} matched.` });
+    res.end();
+  } catch (err) {
+    console.error('Per-postcode fetch error:', err);
+    send({ type: 'error', message: err.message });
+    res.end();
+  }
+});
+
 // ── Delta sync — matches only new runs, uses pre-buffering for speed ──────────
 router.post('/sync/full', async (req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });

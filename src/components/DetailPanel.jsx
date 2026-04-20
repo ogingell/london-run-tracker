@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, CheckCircle2, Circle, Route, ChevronDown } from 'lucide-react';
+import { X, Search, CheckCircle2, Circle, Route, ChevronDown, Download, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 
 const HIGHWAY_LABELS = {
@@ -62,13 +62,16 @@ function RoadRow({ road, isSelected, onClick }) {
   );
 }
 
-export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect }) {
+export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect, onRoadsImported }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState('unrun');
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [selectedRoadId, setSelectedRoadId] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState('');
 
   useEffect(() => {
     if (!selectedId) { setData(null); return; }
@@ -77,12 +80,30 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect })
     setSearch('');
     setShowAll(false);
     setSelectedRoadId(null);
+    setImporting(false);
+    setImportStatus('');
     onRoadSelect?.(null);
     api.getRoadDetail(mode, selectedId)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [selectedId, mode]);
+  }, [selectedId, mode, reloadKey]);
+
+  const handleImport = async () => {
+    setImporting(true);
+    setImportStatus('Starting…');
+    try {
+      await api.fetchPostcodeRoads(selectedId, (event) => {
+        if (event.type === 'status' || event.type === 'progress') setImportStatus(event.message);
+        if (event.type === 'error') setImportStatus(`Error: ${event.message}`);
+      });
+      onRoadsImported?.();
+      setReloadKey(k => k + 1); // re-fetch road list
+    } catch (err) {
+      setImportStatus(`Error: ${err.message}`);
+      setImporting(false);
+    }
+  };
 
   const { runRoads, unrunRoads } = useMemo(() => {
     if (!data?.roads) return { runRoads: [], unrunRoads: [] };
@@ -179,6 +200,26 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect })
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="w-5 h-5 border-2 border-strava border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : mode === 'postcodes' && data && !data.roads_fetched ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3 px-6 text-center">
+            <Download size={22} className="text-slate-600" />
+            <p className="text-sm text-slate-400">No road data for <span className="font-bold text-white">{selectedId}</span> yet.</p>
+            {importStatus && (
+              <p className="text-xs text-slate-500 max-w-xs">{importStatus}</p>
+            )}
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="flex items-center gap-2 px-4 py-2 bg-strava hover:bg-strava/80 disabled:opacity-60
+                         disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              {importing
+                ? <><Loader2 size={12} className="animate-spin" /> Importing…</>
+                : <><Download size={12} /> Import roads for {selectedId}</>
+              }
+            </button>
+            <p className="text-xs text-slate-600">Fetches from OpenStreetMap and matches your existing runs.</p>
           </div>
         ) : activeList.length === 0 ? (
           <div className="py-8 text-center text-xs text-slate-600">

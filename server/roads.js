@@ -66,7 +66,7 @@ router.get('/roads/postcode/:postcode', (req, res) => {
   const { postcode } = req.params;
 
   const boundary = db.prepare(
-    'SELECT postcode, total_roads, total_length_m, covered_length_m, coverage_pct FROM postcode_boundaries WHERE postcode=?'
+    'SELECT postcode, total_roads, total_length_m, covered_length_m, coverage_pct, roads_fetched FROM postcode_boundaries WHERE postcode=?'
   ).get(postcode);
   if (!boundary) return res.status(404).json({ error: 'Not found' });
 

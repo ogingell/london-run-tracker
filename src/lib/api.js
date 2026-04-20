@@ -127,4 +127,32 @@ export const api = {
 
   // Progress
   getProgressSummary: () => request('/progress/summary'),
+
+  // Per-postcode road import (SSE — fetch from Overpass + match activities)
+  fetchPostcodeRoads: (postcode, onEvent) => {
+    return new Promise((resolve, reject) => {
+      fetch(`${BASE}/postcodes/${encodeURIComponent(postcode)}/fetch-roads`, { method: 'POST' })
+        .then(res => {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          function pump() {
+            return reader.read().then(({ done, value }) => {
+              if (done) { resolve(); return; }
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop();
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try { onEvent?.(JSON.parse(line.slice(6))); } catch {}
+                }
+              }
+              return pump();
+            });
+          }
+          return pump();
+        })
+        .catch(reject);
+    });
+  },
 };
