@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Search, CheckCircle2, Circle, Route, ChevronDown, Download, Loader2 } from 'lucide-react';
+import { X, Search, CheckCircle2, Circle, Route, ChevronDown, Download, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 
 const HIGHWAY_LABELS = {
@@ -164,6 +164,22 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect, o
             </span>
           )}
         </div>
+
+        {/* Re-match button — shown for postcodes with roads but 0% coverage */}
+        {mode === 'postcodes' && data?.roads_fetched && data?.coverage_pct === 0 && !importing && (
+          <button
+            onClick={handleImport}
+            title="Re-match your runs against this postcode"
+            className="flex items-center gap-1 px-2 py-1 bg-dark-600 hover:bg-dark-500 border border-white/10
+                       text-xs text-slate-400 hover:text-white rounded-md transition-colors cursor-pointer flex-shrink-0"
+          >
+            <RefreshCw size={10} />
+            Re-match
+          </button>
+        )}
+        {mode === 'postcodes' && importing && (
+          <span className="text-[10px] text-slate-500 flex-shrink-0 max-w-[120px] truncate">{importStatus}</span>
+        )}
 
         <div className="relative flex-shrink-0">
           <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
