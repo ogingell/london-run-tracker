@@ -9,7 +9,7 @@ const router = Router();
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
 ];
 const MATCH_BUFFER_METERS = 25;
 
@@ -29,23 +29,28 @@ async function fetchRoadsForBbox(south, west, north, east) {
   const query = `[out:json][timeout:60];(way["highway"~"^(${RUNNABLE_HIGHWAYS.join('|')})$"](${south},${west},${north},${east}););out body;>;out skel qt;`;
 
   let lastError;
-  for (const url of OVERPASS_ENDPOINTS) {
+  for (let i = 0; i < OVERPASS_ENDPOINTS.length; i++) {
+    const url = OVERPASS_ENDPOINTS[i];
+    if (i > 0) await new Promise(r => setTimeout(r, 2000));
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'LondonRunTracker/1.0',
+        },
         body: `data=${encodeURIComponent(query)}`,
       });
-      if (res.ok) return res.json();
+      if (res.ok) { console.log(`[overpass] OK from ${url}`); return res.json(); }
       const body = await res.text().catch(() => '');
-      lastError = new Error(`Overpass ${res.status} from ${url}`);
-      console.log(`[overpass] ${res.status} from ${url}, trying next mirror…`);
+      lastError = new Error(`Overpass ${res.status} from ${url}: ${body.slice(0, 80)}`);
+      console.log(`[overpass] ${res.status} from ${url}, trying next…`);
     } catch (err) {
       lastError = err;
-      console.log(`[overpass] fetch error from ${url}: ${err.message}, trying next mirror…`);
+      console.log(`[overpass] error from ${url}: ${err.message}, trying next…`);
     }
   }
-  throw new Error(`All Overpass mirrors failed. Last error: ${lastError?.message}`);
+  throw new Error(`All Overpass mirrors failed. Last: ${lastError?.message}`);
 }
 
 function osmToWays(data) {

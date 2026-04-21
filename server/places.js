@@ -7,7 +7,7 @@ const router = Router();
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
 ];
 const LONDON_BBOX = '51.28,-0.51,51.70,0.33';
 

@@ -7,7 +7,7 @@ const router = Router();
 const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
 ];
 
 // Greater London bounding box
