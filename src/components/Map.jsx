@@ -8,13 +8,7 @@ const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.pn
 const DARK_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
 function coverageColor(pct) {
-  // 0%       — dark red (not entered at all)
-  // 1–10%    — red shades (barely touched)
-  // 10–25%   — orange shades (small coverage)
-  // 25–50%   — yellow shades (decent chunk)
-  // 50–75%   — light green shades (over half)
-  // 75–100%  — deep green shades (well covered)
-  if (pct === 0)   return '#7f1d1d'; // dark red — not entered
+  if (pct === 0)   return '#1e293b'; // not entered — dark/invisible
   if (pct < 5)     return '#991b1b'; // red
   if (pct < 10)    return '#b91c1c'; // red
   if (pct < 15)    return '#ea580c'; // orange-red
