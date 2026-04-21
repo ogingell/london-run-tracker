@@ -73,9 +73,9 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect, o
   const [importing, setImporting] = useState(false);
   const [importStatus, setImportStatus] = useState('');
 
+  // Reset selection state when postcode/mode changes, but NOT when reloadKey changes
+  // (reloadKey just re-fetches the road list after import — don't discard import state)
   useEffect(() => {
-    if (!selectedId) { setData(null); return; }
-    setLoading(true);
     setTab('unrun');
     setSearch('');
     setShowAll(false);
@@ -83,6 +83,11 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect, o
     setImporting(false);
     setImportStatus('');
     onRoadSelect?.(null);
+  }, [selectedId, mode]);
+
+  useEffect(() => {
+    if (!selectedId) { setData(null); return; }
+    setLoading(true);
     api.getRoadDetail(mode, selectedId)
       .then(setData)
       .catch(console.error)
@@ -92,16 +97,20 @@ export default function DetailPanel({ mode, selectedId, onClose, onRoadSelect, o
   const handleImport = async () => {
     setImporting(true);
     setImportStatus('Starting…');
+    let hadError = false;
     try {
       await api.fetchPostcodeRoads(selectedId, (event) => {
         if (event.type === 'status' || event.type === 'progress') setImportStatus(event.message);
-        if (event.type === 'error') setImportStatus(`Error: ${event.message}`);
+        if (event.type === 'error') { setImportStatus(`Error: ${event.message}`); hadError = true; }
       });
-      onRoadsImported?.();
-      setReloadKey(k => k + 1); // re-fetch road list
     } catch (err) {
       setImportStatus(`Error: ${err.message}`);
-      setImporting(false);
+      hadError = true;
+    }
+    setImporting(false);
+    if (!hadError) {
+      onRoadsImported?.();
+      setReloadKey(k => k + 1);
     }
   };
 
