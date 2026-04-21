@@ -8,14 +8,26 @@ const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.pn
 const DARK_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
 function coverageColor(pct) {
-  if (pct === 0) return '#1e293b';
-  if (pct < 5) return '#7f1d1d';
-  if (pct < 15) return '#b91c1c';
-  if (pct < 30) return '#dc2626';
-  if (pct < 50) return '#f59e0b';
-  if (pct < 70) return '#84cc16';
-  if (pct < 85) return '#22c55e';
-  return '#06d6a0';
+  // 0%       — dark red (not entered at all)
+  // 1–10%    — red shades (barely touched)
+  // 10–25%   — orange shades (small coverage)
+  // 25–50%   — yellow shades (decent chunk)
+  // 50–75%   — light green shades (over half)
+  // 75–100%  — deep green shades (well covered)
+  if (pct === 0)   return '#7f1d1d'; // dark red — not entered
+  if (pct < 5)     return '#991b1b'; // red
+  if (pct < 10)    return '#b91c1c'; // red
+  if (pct < 15)    return '#ea580c'; // orange-red
+  if (pct < 20)    return '#f97316'; // orange
+  if (pct < 25)    return '#fb923c'; // light orange
+  if (pct < 33)    return '#fbbf24'; // amber
+  if (pct < 42)    return '#f59e0b'; // yellow-amber
+  if (pct < 50)    return '#eab308'; // yellow
+  if (pct < 60)    return '#84cc16'; // yellow-green
+  if (pct < 70)    return '#4ade80'; // light green
+  if (pct < 80)    return '#22c55e'; // green
+  if (pct < 90)    return '#16a34a'; // medium green
+  return '#15803d';                  // deep green
 }
 
 function coverageOpacity(pct, roadsFetched) {
@@ -208,9 +220,7 @@ export default function Map({ boundaries, mode, polylines, selectedItem, onItemS
         attributionControl={true}
       >
         <TileLayer url={DARK_TILES} attribution={DARK_ATTRIBUTION} />
-        {(vizMode === 'heatmap' || vizMode === 'runs') && polylines.length > 0 && (
-          <ActivityTraces polylines={polylines} />
-        )}
+        {polylines.length > 0 && <ActivityTraces polylines={polylines} />}
         <BoundaryLayer
           data={boundaries}
           mode={mode}
