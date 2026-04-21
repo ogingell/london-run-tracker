@@ -21,15 +21,32 @@ function decodePolyline(encoded) {
   return polyline.decode(encoded).map(([lat, lng]) => [lng, lat]);
 }
 
-async function fetchRoadsForBbox(south, west, north, east) {
+async function fetchRoadsForBbox(south, west, north, east, retries = 3) {
   const query = `[out:json][timeout:60];(way["highway"~"^(${RUNNABLE_HIGHWAYS.join('|')})$"](${south},${west},${north},${east}););out body;>;out skel qt;`;
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!res.ok) throw new Error(`Overpass error ${res.status}`);
-  return res.json();
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+    });
+    if (res.ok) return res.json();
+
+    const body = await res.text().catch(() => '');
+    const isRateLimit = res.status === 429 || res.status === 406;
+
+    if (isRateLimit && attempt < retries) {
+      const delay = attempt * 10000; // 10s, 20s
+      console.log(`[overpass] Rate limited (${res.status}), retrying in ${delay / 1000}s (attempt ${attempt}/${retries})`);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+
+    const hint = isRateLimit ? ' (rate limited — retried, still failing. Wait a minute and try again.)'
+               : body.includes('timeout') ? ' (query timed out)'
+               : '';
+    throw new Error(`Overpass error ${res.status}${hint}`);
+  }
 }
 
 function osmToWays(data) {
@@ -260,7 +277,7 @@ router.post('/postcodes/:postcode/fetch-roads', async (req, res) => {
 
     // Phase 1: fetch roads (skip if already loaded)
     if (!boundary.roads_fetched) {
-      send({ type: 'status', message: `Fetching roads for ${postcode} from OpenStreetMap…` });
+      send({ type: 'status', message: `Fetching roads for ${postcode} from OpenStreetMap… (may take up to 30s)` });
       const boundaryGeo = JSON.parse(boundary.boundary);
       const [west, south, east, north] = turf.bbox(boundaryGeo);
       const osmData = await fetchRoadsForBbox(south - 0.001, west - 0.001, north + 0.001, east + 0.001);
