@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Polyline, useMap, CircleMarker } from 'react-leaflet';
 import polylineCodec from '@mapbox/polyline';
 
@@ -24,7 +24,10 @@ function coverageOpacity(pct, roadsFetched) {
   return 0.28 + (pct / 100) * 0.42;
 }
 
-function BoundaryLayer({ data, mode, selectedItem, onItemSelect }) {
+const VIZ_MODES = ['heatmap', 'glow', 'runs'];
+const VIZ_LABELS = { heatmap: 'Heatmap', glow: 'Glow', runs: 'Runs' };
+
+function BoundaryLayer({ data, mode, selectedItem, onItemSelect, vizMode }) {
   const geoJsonRef = useRef();
   const map = useMap();
 
@@ -44,14 +47,39 @@ function BoundaryLayer({ data, mode, selectedItem, onItemSelect }) {
     const { coveragePct, roadsFetched } = feature.properties;
     const id = getItemId(feature);
     const isSelected = id === selectedItem;
+    const col = coverageColor(coveragePct);
+
+    if (vizMode === 'glow') {
+      // Outline-only: thin colored border + very faint fill fade
+      return {
+        fillColor: col,
+        fillOpacity: isSelected ? 0.22 : (roadsFetched ? 0.07 : 0.03),
+        color: isSelected ? '#f1f5f9' : col,
+        weight: isSelected ? 2.5 : mode === 'places' ? 1 : 1.5,
+        opacity: isSelected ? 1 : (roadsFetched ? 0.75 : 0.2),
+      };
+    }
+
+    if (vizMode === 'runs') {
+      // Nearly invisible — let the run traces speak
+      return {
+        fillColor: col,
+        fillOpacity: isSelected ? 0.18 : 0,
+        color: isSelected ? '#f1f5f9' : col,
+        weight: isSelected ? 1.5 : 0.4,
+        opacity: isSelected ? 0.9 : (roadsFetched ? 0.25 : 0.1),
+      };
+    }
+
+    // heatmap (default)
     return {
-      fillColor: coverageColor(coveragePct),
+      fillColor: col,
       fillOpacity: isSelected ? 0.72 : coverageOpacity(coveragePct, roadsFetched),
-      color: isSelected ? '#f1f5f9' : coverageColor(coveragePct),
+      color: isSelected ? '#f1f5f9' : col,
       weight: isSelected ? 2.5 : mode === 'places' ? 0.5 : 0.8,
       opacity: isSelected ? 1 : 0.4,
     };
-  }, [selectedItem, mode]);
+  }, [selectedItem, mode, vizMode]);
 
   const onEachFeature = useMemo(() => (feature, layer) => {
     const { coveragePct, totalRoads, roadsFetched } = feature.properties;
@@ -166,23 +194,48 @@ function ActivityTraces({ polylines }) {
 }
 
 export default function Map({ boundaries, mode, polylines, selectedItem, onItemSelect, highlightedRoad }) {
+  const [vizModeIdx, setVizModeIdx] = useState(0);
+  const vizMode = VIZ_MODES[vizModeIdx];
+  const cycleViz = () => setVizModeIdx(i => (i + 1) % VIZ_MODES.length);
+
   return (
-    <MapContainer
-      center={LONDON_CENTER}
-      zoom={LONDON_ZOOM}
-      className="h-full w-full"
-      zoomControl={true}
-      attributionControl={true}
-    >
-      <TileLayer url={DARK_TILES} attribution={DARK_ATTRIBUTION} />
-      {polylines.length > 0 && <ActivityTraces polylines={polylines} />}
-      <BoundaryLayer
-        data={boundaries}
-        mode={mode}
-        selectedItem={selectedItem}
-        onItemSelect={onItemSelect}
-      />
-      <RoadHighlight road={highlightedRoad} />
-    </MapContainer>
+    <div className="h-full w-full relative">
+      <MapContainer
+        center={LONDON_CENTER}
+        zoom={LONDON_ZOOM}
+        className="h-full w-full"
+        zoomControl={true}
+        attributionControl={true}
+      >
+        <TileLayer url={DARK_TILES} attribution={DARK_ATTRIBUTION} />
+        {(vizMode === 'heatmap' || vizMode === 'runs') && polylines.length > 0 && (
+          <ActivityTraces polylines={polylines} />
+        )}
+        <BoundaryLayer
+          data={boundaries}
+          mode={mode}
+          selectedItem={selectedItem}
+          onItemSelect={onItemSelect}
+          vizMode={vizMode}
+        />
+        <RoadHighlight road={highlightedRoad} />
+      </MapContainer>
+
+      {/* Viz mode cycle button */}
+      <button
+        onClick={cycleViz}
+        title="Cycle visualisation mode"
+        className="absolute bottom-8 right-3 z-[1000] flex items-center gap-1.5 px-2.5 py-1.5
+                   bg-dark-800/90 backdrop-blur-sm border border-white/10 rounded-lg
+                   text-xs font-semibold text-slate-300 hover:text-white hover:border-white/25
+                   transition-all cursor-pointer shadow-lg"
+      >
+        <span className="text-[10px] text-slate-500 uppercase tracking-wide">View</span>
+        <span>{VIZ_LABELS[vizMode]}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-slate-500">
+          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      </button>
+    </div>
   );
 }
