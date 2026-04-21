@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Polyline, useMap, CircleMarker } from 'react-leaflet';
 import polylineCodec from '@mapbox/polyline';
 
@@ -40,7 +40,6 @@ const VIZ_MODES = ['heatmap', 'glow', 'runs'];
 const VIZ_LABELS = { heatmap: 'Heatmap', glow: 'Glow', runs: 'Runs' };
 
 function BoundaryLayer({ data, mode, selectedItem, onItemSelect, vizMode }) {
-  const geoJsonRef = useRef();
   const map = useMap();
 
   const getItemId = (feature) => {
@@ -111,9 +110,10 @@ function BoundaryLayer({ data, mode, selectedItem, onItemSelect, vizMode }) {
       }
     });
     layer.on('mouseout', (e) => {
-      if (geoJsonRef.current) geoJsonRef.current.resetStyle(e.target);
+      // Re-apply the computed style directly — avoids stale ref issues with resetStyle
+      e.target.setStyle(style(feature));
     });
-  }, [selectedItem, onItemSelect, mode]);
+  }, [selectedItem, onItemSelect, mode, style]);
 
   // Fly to selected item
   useEffect(() => {
@@ -141,7 +141,6 @@ function BoundaryLayer({ data, mode, selectedItem, onItemSelect, vizMode }) {
 
   return (
     <GeoJSON
-      ref={geoJsonRef}
       key={`${mode}-${JSON.stringify(data.features.map(f => f.properties.coveragePct))}`}
       data={data}
       style={style}
