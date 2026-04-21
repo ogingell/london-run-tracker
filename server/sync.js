@@ -6,7 +6,11 @@ import { computePlacesCoverage } from './places.js';
 
 const router = Router();
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 const MATCH_BUFFER_METERS = 25;
 
 const RUNNABLE_HIGHWAYS = [
@@ -21,32 +25,27 @@ function decodePolyline(encoded) {
   return polyline.decode(encoded).map(([lat, lng]) => [lng, lat]);
 }
 
-async function fetchRoadsForBbox(south, west, north, east, retries = 3) {
+async function fetchRoadsForBbox(south, west, north, east) {
   const query = `[out:json][timeout:60];(way["highway"~"^(${RUNNABLE_HIGHWAYS.join('|')})$"](${south},${west},${north},${east}););out body;>;out skel qt;`;
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-    });
-    if (res.ok) return res.json();
-
-    const body = await res.text().catch(() => '');
-    const isRateLimit = res.status === 429 || res.status === 406;
-
-    if (isRateLimit && attempt < retries) {
-      const delay = attempt * 10000; // 10s, 20s
-      console.log(`[overpass] Rate limited (${res.status}), retrying in ${delay / 1000}s (attempt ${attempt}/${retries})`);
-      await new Promise(r => setTimeout(r, delay));
-      continue;
+  let lastError;
+  for (const url of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+      });
+      if (res.ok) return res.json();
+      const body = await res.text().catch(() => '');
+      lastError = new Error(`Overpass ${res.status} from ${url}`);
+      console.log(`[overpass] ${res.status} from ${url}, trying next mirror…`);
+    } catch (err) {
+      lastError = err;
+      console.log(`[overpass] fetch error from ${url}: ${err.message}, trying next mirror…`);
     }
-
-    const hint = isRateLimit ? ' (rate limited — retried, still failing. Wait a minute and try again.)'
-               : body.includes('timeout') ? ' (query timed out)'
-               : '';
-    throw new Error(`Overpass error ${res.status}${hint}`);
   }
+  throw new Error(`All Overpass mirrors failed. Last error: ${lastError?.message}`);
 }
 
 function osmToWays(data) {

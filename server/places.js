@@ -4,7 +4,11 @@ import db from './db.js';
 
 const router = Router();
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 const LONDON_BBOX = '51.28,-0.51,51.70,0.33';
 
 // Same London boundary polygon used by postcodes.js for clipping Voronoi cells
@@ -61,13 +65,23 @@ async function fetchPlaceBoundaries() {
     out geom;
   `;
 
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!res.ok) throw new Error(`Overpass error: ${res.status}`);
-  return res.json();
+  let lastError;
+  for (const url of OVERPASS_ENDPOINTS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+      });
+      if (res.ok) return res.json();
+      lastError = new Error(`Overpass ${res.status} from ${url}`);
+      console.log(`[overpass] ${res.status} from ${url}, trying next mirror…`);
+    } catch (err) {
+      lastError = err;
+      console.log(`[overpass] error from ${url}: ${err.message}, trying next mirror…`);
+    }
+  }
+  throw new Error(`All Overpass mirrors failed: ${lastError?.message}`);
 }
 
 function osmRelationToPolygon(relation) {
